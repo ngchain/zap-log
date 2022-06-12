@@ -23,6 +23,8 @@ func init() {
 
 // Logging environment variables
 const (
+	envTimeFmt = "ZAP_TIME_FMT"
+
 	envLogging    = "ZAP_LOG_LEVEL"
 	envLoggingFmt = "ZAP_LOG_FMT"
 
@@ -81,6 +83,9 @@ var loggerMutex sync.RWMutex // guards access to global logger state
 var loggers = make(map[string]*zap.SugaredLogger)
 var levels = make(map[string]zap.AtomicLevel)
 
+// defaultTimeFormat is the format of the primary core used for logging
+var defaultTimeFormat string = time.Kitchen
+
 // primaryFormat is the format of the primary core used for logging
 var primaryFormat LogFormat = ColorizedOutput
 
@@ -109,6 +114,7 @@ func SetupLogging(cfg Config) {
 
 	config = cfg
 
+	defaultTimeFormat = cfg.TimeFormat
 	primaryFormat = cfg.LogFormat
 	defaultLevel = cfg.Level
 
@@ -138,7 +144,7 @@ func SetupLogging(cfg Config) {
 		panic(fmt.Sprintf("unable to open logging output: %v", err))
 	}
 
-	newPrimaryCore := newCore(ws, primaryFormat, time.Kitchen, LevelDebug) // the main core needs to log everything.
+	newPrimaryCore := newCore(ws, primaryFormat, defaultTimeFormat, LevelDebug) // the main core needs to log everything.
 
 	for k, v := range cfg.Labels {
 		newPrimaryCore = newPrimaryCore.With([]zap.Field{zap.String(k, v)})
@@ -282,12 +288,19 @@ func getLogger(name string) *zap.SugaredLogger {
 
 // configFromEnv returns a Config with defaults populated using environment variables.
 func configFromEnv() Config {
+	// load with default configs
 	cfg := Config{
-		LogFormat:       ColorizedOutput,
+		TimeFormat:      defaultTimeFormat,
+		LogFormat:       primaryFormat,
 		Stderr:          true,
-		Level:           LevelError,
+		Level:           defaultLevel,
 		SubsystemLevels: map[string]LogLevel{},
 		Labels:          map[string]string{},
+	}
+
+	timeFormat := os.Getenv(envTimeFmt)
+	if timeFormat != "" {
+		cfg.TimeFormat = timeFormat
 	}
 
 	format := os.Getenv(envLoggingFmt)
